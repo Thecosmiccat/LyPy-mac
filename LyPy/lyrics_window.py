@@ -5,20 +5,21 @@ smooth scrolling, and edge-resize support for frameless windows.
 """
 
 import io
+import os
 import colorsys
 import ctypes
 from ctypes import wintypes
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QScrollArea, QPushButton, QApplication, QSizePolicy,
-    QSlider, QComboBox, QGroupBox, QFormLayout,
+    QSlider, QComboBox, QGroupBox, QFormLayout, QStyleFactory,
 )
 from PyQt5.QtCore import (
-    Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect, QPoint,
+    Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect, QPoint,
 )
 from PyQt5.QtGui import (
-    QColor, QPalette, QLinearGradient, QPainter, QBrush, QPainterPath, QCursor,
-    QFont, QFontDatabase, QDesktopServices,
+    QIcon, QPixmap, QColor, QPalette, QLinearGradient, QPainter,
+    QBrush, QPainterPath, QCursor, QFont, QFontDatabase, QDesktopServices,
 )
 from PyQt5.QtCore import QUrl
 
@@ -173,15 +174,6 @@ class TitleBar(QWidget):
             }
             QPushButton:hover { background: rgba(255,255,255,0.12); color: #fff; }
         """
-        media_btn = """
-            QPushButton {
-                border: none; border-radius: 12px;
-                color: rgba(255,255,255,0.55); font-size: 11px;
-                background: transparent;
-            }
-            QPushButton:hover { background: rgba(255,255,255,0.12); color: #fff; }
-        """
-
         # ── Pin button (moved before media controls) ──
         self.pin_btn = QPushButton("\ud83d\udccd")   # unpinned icon
         self.pin_btn.setFixedSize(24, 24)
@@ -190,24 +182,47 @@ class TitleBar(QWidget):
         self.pin_btn.clicked.connect(self._toggle_pin)
         layout.addWidget(self.pin_btn)
 
+        # ── Resolve asset directory (same folder as this file) ──
+        _here = os.path.dirname(os.path.abspath(__file__))
+        def _icon(name: str) -> QIcon:
+            path = os.path.join(_here, "assets", f"{name}.png")
+            pix = QPixmap(path)
+            return QIcon(pix)
+
+        _media_style = (
+            "QPushButton { background: transparent; border: none;"
+            "  color: rgba(255,255,255,0.75); font-size: 13px; }"
+            "QPushButton:hover   { background: transparent; color: #ffffff; }"
+            "QPushButton:pressed { background: transparent; color: rgba(255,255,255,0.45); }"
+        )
+
         # ── Media controls ──
-        self.prev_btn = QPushButton("\u23ee")
+        self._icon_play  = _icon("btn_play")
+        self._icon_pause = _icon("btn_pause")
+
+        self.prev_btn = QPushButton()
+        self.prev_btn.setIcon(_icon("btn_prev"))
+        self.prev_btn.setIconSize(QSize(18, 18))
         self.prev_btn.setFixedSize(24, 24)
-        self.prev_btn.setStyleSheet(media_btn)
+        self.prev_btn.setStyleSheet(_media_style)
         self.prev_btn.setToolTip("Previous")
         self.prev_btn.clicked.connect(self.prev_clicked.emit)
         layout.addWidget(self.prev_btn)
 
-        self.play_pause_btn = QPushButton("\u23ef")
+        self.play_pause_btn = QPushButton()
+        self.play_pause_btn.setIcon(self._icon_pause)
+        self.play_pause_btn.setIconSize(QSize(18, 18))
         self.play_pause_btn.setFixedSize(24, 24)
-        self.play_pause_btn.setStyleSheet(media_btn)
+        self.play_pause_btn.setStyleSheet(_media_style)
         self.play_pause_btn.setToolTip("Play / Pause")
         self.play_pause_btn.clicked.connect(self.play_pause_clicked.emit)
         layout.addWidget(self.play_pause_btn)
 
-        self.next_btn = QPushButton("\u23ed")
+        self.next_btn = QPushButton()
+        self.next_btn.setIcon(_icon("btn_next"))
+        self.next_btn.setIconSize(QSize(18, 18))
         self.next_btn.setFixedSize(24, 24)
-        self.next_btn.setStyleSheet(media_btn)
+        self.next_btn.setStyleSheet(_media_style)
         self.next_btn.setToolTip("Next")
         self.next_btn.clicked.connect(self.next_clicked.emit)
         layout.addWidget(self.next_btn)
@@ -239,8 +254,12 @@ class TitleBar(QWidget):
             self.pin_btn, self.prev_btn, self.play_pause_btn,
             self.next_btn, self.settings_btn, self.min_btn, self.close_btn,
         ]
-        # Start hidden
+        # Force Fusion style so Windows native renderer doesn't paint a black
+        # hover background that ignores our transparent stylesheet.
+        _fusion = QStyleFactory.create("Fusion")
         for b in self._action_buttons:
+            b.setStyle(_fusion)
+            b.setAttribute(Qt.WA_TranslucentBackground)
             b.setVisible(False)
 
         self.setStyleSheet("background: transparent;")
@@ -254,6 +273,12 @@ class TitleBar(QWidget):
             self.pin_btn.setText("\ud83d\udccd")
             self.pin_btn.setToolTip("Pin window (lock position)")
         self.pin_toggled.emit(self._pinned)
+
+    def set_playing(self, playing: bool):
+        """Swap the play/pause icon to reflect the current playback state."""
+        self.play_pause_btn.setIcon(
+            self._icon_pause if playing else self._icon_play
+        )
 
     # ── Drag support (disabled when pinned) ──
     def mousePressEvent(self, event):
@@ -371,7 +396,7 @@ QWidget#settingRow QLabel {
     background: transparent;
 }
 QWidget#settingRow QLabel#valueLabel {
-    color: #1db954;
+    color: rgba(255,255,255,0.90);
     font-weight: 600;
     font-size: 13px;
     min-width: 36px;
@@ -384,7 +409,7 @@ QSlider::groove:horizontal {
     border-radius: 2px;
 }
 QSlider::handle:horizontal {
-    background: #1db954;
+    background: rgba(255,255,255,0.90);
     border: none;
     width: 12px;
     height: 12px;
@@ -392,21 +417,11 @@ QSlider::handle:horizontal {
     border-radius: 6px;
 }
 QSlider::sub-page:horizontal {
-    background: #1db954;
+    background: rgba(255,255,255,0.70);
     border-radius: 2px;
 }
 
 /* ── Buttons ── */
-QPushButton#saveBtn {
-    background: #1db954;
-    color: #000;
-    border: none;
-    border-radius: 20px;
-    padding: 10px 40px;
-    font-size: 14px;
-    font-weight: 700;
-}
-QPushButton#saveBtn:hover { background: #1ed760; }
 QPushButton#backBtn {
     background: transparent;
     color: rgba(255,255,255,0.65);
@@ -468,20 +483,26 @@ class SettingsPanel(QWidget):
         top_row.addStretch()
         root.addLayout(top_row)
 
+        root.addStretch(1)
+
         # ── TEXT section ──────────────────────────────────────────
         root.addWidget(self._section_title("TEXT"))
+        root.addSpacing(4)
         root.addWidget(self._slider_row(
             "Font size", 14, 48, config["font_size"], "px", "size"))
-        root.addSpacing(4)
+        root.addSpacing(8)
         root.addWidget(self._slider_row(
             "Line spacing", 0, 10, config.get("line_spacing", 3), "px", "spacing"))
 
+        root.addStretch(2)
+
         # ── BACKGROUND section ────────────────────────────────────
         root.addWidget(self._section_title("BACKGROUND"))
+        root.addSpacing(4)
         root.addWidget(self._slider_row(
             "Color saturation", 0, 100, config.get("bg_saturation", 80), "%", "sat"))
 
-        root.addSpacing(16)
+        root.addSpacing(12)
 
         # ── Action buttons ────────────────────────────────────────
         action_row = QHBoxLayout()
@@ -501,18 +522,7 @@ class SettingsPanel(QWidget):
 
         root.addLayout(action_row)
 
-        root.addStretch()
-
-        # ── Save button ──────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setObjectName("saveBtn")
-        self.save_btn.setCursor(QCursor(Qt.PointingHandCursor))
-        self.save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(self.save_btn)
-        btn_row.addStretch()
-        root.addLayout(btn_row)
+        root.addStretch(1)
 
     # ── Helpers to build consistent setting rows ─────────────────
     def _section_title(self, text: str) -> QLabel:
@@ -525,6 +535,7 @@ class SettingsPanel(QWidget):
         """Build a styled row: label ... slider ... value."""
         row = QWidget()
         row.setObjectName("settingRow")
+        row.setMinimumHeight(54)
         h = QHBoxLayout(row)
         h.setContentsMargins(14, 10, 14, 10)
         h.setSpacing(12)
@@ -554,9 +565,7 @@ class SettingsPanel(QWidget):
             QUrl("https://github.com/YOUR_REPO/LyPy/issues"))
 
     def _on_back(self):
-        self.closed.emit()
-
-    def _on_save(self):
+        """Autosave then close."""
         self.config["font_size"] = self._size_slider.value()
         self.config["line_spacing"] = self._spacing_slider.value()
         self.config["bg_saturation"] = self._sat_slider.value()
@@ -853,6 +862,8 @@ class LyricsWindow(QMainWindow):
 
         if self.current_lyrics and self.current_lyrics["synced"]:
             self._highlight_line(playback["progress_ms"])
+
+        self.title_bar.set_playing(playback.get("is_playing", True))
 
     # ── Gradient ─────────────────────────────────────────────────
     def _set_gradient(self, colors: tuple[str, str, str]):

@@ -164,7 +164,11 @@ class TitleBar(QWidget):
             "font-weight: 600; background: transparent;"
         )
         layout.addWidget(self.title)
-        layout.addStretch()
+
+        # ── Inline progress bar (between title and buttons) ──
+        self.progress_bar = ProgressBar(self)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar, 1)   # stretch=1 fills available space
 
         btn = """
             QPushButton {
@@ -280,6 +284,9 @@ class TitleBar(QWidget):
             self._icon_pause if playing else self._icon_play
         )
 
+    def set_progress(self, progress_ms: int, duration_ms: int):
+        self.progress_bar.set_progress(progress_ms, duration_ms)
+
     # ── Drag support (disabled when pinned) ──
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and not self._pinned:
@@ -296,10 +303,12 @@ class TitleBar(QWidget):
     def _show_buttons(self):
         for b in self._action_buttons:
             b.setVisible(True)
+        self.progress_bar.setVisible(True)
 
     def _hide_buttons(self):
         for b in self._action_buttons:
             b.setVisible(False)
+        self.progress_bar.setVisible(False)
 
     def enterEvent(self, event):
         self._show_buttons()
@@ -308,6 +317,85 @@ class TitleBar(QWidget):
     def leaveEvent(self, event):
         self._hide_buttons()
         super().leaveEvent(event)
+
+
+# ─── Thin song-progress bar (title-bar overlay) ─────────────────────────
+
+class ProgressBar(QWidget):
+    """Inline progress bar drawn as a thin pill, vertically centred in the title bar."""
+
+    _BAR_H   = 3    # drawn height of the track in pixels
+    _PAD     = 6    # gap between time label and track edge
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._progress    = 0.0
+        self._progress_ms = 0
+        self._duration_ms = 0
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedHeight(20)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    @staticmethod
+    def _fmt(ms: int) -> str:
+        s   = ms // 1000
+        m, s = divmod(s, 60)
+        return f"{m}:{s:02d}"
+
+    def set_progress(self, progress_ms: int, duration_ms: int):
+        self._progress_ms = progress_ms
+        self._duration_ms = duration_ms
+        if duration_ms and duration_ms > 0:
+            self._progress = max(0.0, min(1.0, progress_ms / duration_ms))
+        else:
+            self._progress = 0.0
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        font = p.font()
+        font.setPointSize(8)
+        font.setWeight(QFont.Medium)
+        p.setFont(font)
+        fm = p.fontMetrics()
+
+        left_txt  = self._fmt(self._progress_ms)
+        right_txt = self._fmt(self._duration_ms)
+
+        lw = fm.horizontalAdvance(left_txt)
+        rw = fm.horizontalAdvance(right_txt)
+
+        w  = self.width()
+        h  = self.height()
+        cy = h // 2
+
+        text_color = QColor(255, 255, 255, 160)
+        p.setPen(text_color)
+        # Use QRect + AlignVCenter so both labels are pixel-perfectly at the same height
+        p.drawText(QRect(0, 0, lw, h), Qt.AlignVCenter | Qt.AlignLeft, left_txt)
+        p.drawText(QRect(w - rw, 0, rw, h), Qt.AlignVCenter | Qt.AlignRight, right_txt)
+
+        # Track spans between the two labels
+        bh     = self._BAR_H
+        bar_x  = lw + self._PAD
+        bar_w  = w - lw - rw - self._PAD * 2
+        bar_y  = cy - bh // 2
+        r      = bh / 2
+
+        if bar_w > 0:
+            track = QPainterPath()
+            track.addRoundedRect(bar_x, bar_y, bar_w, bh, r, r)
+            p.fillPath(track, QBrush(QColor(255, 255, 255, 45)))
+
+            fill_w = int(bar_w * self._progress)
+            if fill_w > 0:
+                fill = QPainterPath()
+                fill.addRoundedRect(bar_x, bar_y, fill_w, bh, r, r)
+                p.fillPath(fill, QBrush(QColor(255, 255, 255, 200)))
+
+        p.end()
 
 
 # ─── Smooth-scrolling scroll area ───────────────────────────────────────
@@ -864,6 +952,10 @@ class LyricsWindow(QMainWindow):
             self._highlight_line(playback["progress_ms"])
 
         self.title_bar.set_playing(playback.get("is_playing", True))
+        self.title_bar.set_progress(
+            playback.get("progress_ms", 0),
+            playback.get("duration_ms", 0),
+        )
 
     # ── Gradient ─────────────────────────────────────────────────
     def _set_gradient(self, colors: tuple[str, str, str]):

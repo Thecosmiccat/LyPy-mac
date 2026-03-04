@@ -11,7 +11,18 @@ Browser playback is currently disabled.
 
 ## Users (No Python Required)
 
-If you already have a built app bundle, just run:
+If you downloaded `LyPy-mac.zip` from Releases:
+
+1. Unzip `LyPy-mac.zip`
+2. Open `LyPy.app`
+
+Or from terminal:
+
+```bash
+open LyPy.app
+```
+
+If you already have a built app bundle in this repo, run:
 
 ```bash
 open app/dist/LyPy.app

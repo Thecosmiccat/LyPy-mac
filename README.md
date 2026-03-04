@@ -1,4 +1,4 @@
-# LyPy (macOS-first)
+# LyPy (macOS) by thecosmiccat
 
 LyPy is a macOS-first desktop lyrics overlay for Spotify and Apple Music desktop apps.
 

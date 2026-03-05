@@ -19,7 +19,6 @@ If you downloaded `LyPy-mac.zip` from Releases:
 2. Open `LyPy.app`
 
 
-```
 
 That is all normal users need.
 
